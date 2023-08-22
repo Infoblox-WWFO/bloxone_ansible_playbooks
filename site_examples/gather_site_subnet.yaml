@@ -1,0 +1,17 @@
+---
+- hosts: localhost
+  connection: local
+  collections:
+    - infoblox.b1ddi_modules
+
+  tasks:
+    #  Gather ID for a given IP space
+    - name: Gather Subnet
+      b1_ipam_subnet_gather:
+        host: "{{ host_server }}"
+        api_key: "{{ api_key }}"
+        state: gather
+        fields: [ 'id', 'address', 'cidr', 'tags']
+        tfilters: {"Site": "{{ site }}"}
+      register: subnet
+    - debug: msg="{{ subnet }}"

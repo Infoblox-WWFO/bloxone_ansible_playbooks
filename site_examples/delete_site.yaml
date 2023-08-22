@@ -1,0 +1,28 @@
+---
+- hosts: localhost
+  connection: local
+  collections:
+    - infoblox.b1ddi_modules
+  
+  vars:
+    - ip_space: "marrison-lab"
+
+  tasks:
+    #  Gather ID for a given IP space
+    - name: Gather Subnet
+      b1_ipam_subnet_gather:
+        host: "{{ host_server }}"
+        api_key: "{{ api_key }}"
+        state: gather
+        fields: [ 'id', 'address', 'cidr', 'tags']
+        tfilters: {"Site": "{{ site }}"}
+      register: subnet
+    - debug: msg="{{ subnet }}"
+  
+    - name: Detele site subnet
+      b1_ipam_subnet:
+        space: "{{ ip_space }}"
+        host: "{{ host_server }}"
+        api_key: "{{ api_key }}"
+        state: absent
+        address: "{{ subnet.meta.results.0.address }}/{{ subnet.meta.results.0.cidr }}"

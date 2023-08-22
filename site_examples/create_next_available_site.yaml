@@ -1,0 +1,75 @@
+---
+- hosts: localhost
+  connection: local
+  collections:
+    - infoblox.b1ddi_modules
+
+  vars:
+    - ip_space: marrison-lab
+    - fixed_address_name: default-gw
+    - match_type: mac
+
+  tasks:
+    - name: Find site address_block for named site using tags
+      b1_ipam_address_block_gather:
+        host: "{{ host_server }}"
+        api_key: "{{ api_key }}"
+        state: gather
+        tfilters: { "Site_Location": "{{ region }}" }
+        fields: ['address', 'cidr', 'id']
+      register: address_block
+    - debug: msg="{{ address_block}}"
+
+    - name: Create Subnet using next_available_subnet
+      b1_ipam_subnet:
+        space: "{{ ip_space }}"
+        address: '{"next_available_subnet": {"cidr": "24", "count": "1", "parent_block": "{{ address_block.meta.results.0.address }}/{{ address_block.meta.results.0.cidr }}"}}'
+        name: "Site"
+        comment: "Ansible Created Site"
+        api_key: "{{ api_key }}"
+        host: "{{ host_server }}"
+        state: present
+      register: subnet
+    - debug: msg="{{ subnet }}"
+    
+    - name: Add tags to subnet
+      b1_ipam_subnet:
+        space: "{{ ip_space }}"
+        address: '{ "new_address": "{{ subnet.meta.results.0.address }}/{{ subnet.meta.results.0.cidr }}" }'
+        dhcp_options:
+          - routers: 'first'
+        tags:
+          - "Site": "{{ site | default('Test Site') }}"
+          - "Site_Location": "{{ region | default() }}"
+        api_key: "{{ api_key }}"
+        host: "{{ host_server }}"
+        state: present
+      register: updated_subnet
+    - debug: msg="{{ updated_subnet }}"
+    
+    - name: Add fixed address for gw
+      b1_ipam_fixed_address:
+        address: '{ "next_available_ip": { "subnet": "{{ subnet.meta.results.0.address }}/{{ subnet.meta.results.0.cidr }}" } }'
+        space: "{{ ip_space }}"
+        name: "{{ fixed_address_name }}"
+        match_type: "{{ match_type }}"
+        match_value: "FF:FF:FF:FF:FF:FF"    
+        comment: "Created by Ansible"
+        api_key: "{{ api_key }}"
+        host: "{{ host_server }}"
+        state: present
+      register: fixed_addr
+    - debug: msg="{{ fixed_addr}}"
+
+    - name: Create IPAM range
+      b1_ipam_range:
+        start: "{{ subnet.meta.results.0.address | ansible.utils.ipmath(10) }}"
+        end: "{{ subnet.meta.results.0.address | ansible.utils.ipmath(200) }}"
+        space: "{{ ip_space }}"
+        name: "Site Dynamic Range"
+        comment: "Created by ansible"
+        api_key: "{{ api_key }}"
+        host: "{{ host_server }}"
+        state: present
+      register: range
+    - debug: msg="{{ range }}"
